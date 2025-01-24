@@ -1,12 +1,13 @@
 import React from "react";
-import { newCanvas } from "../model/canvasmodel";
+import { initPixelData, newCanvas, PixelData } from "../model/canvasmodel";
 import { Button } from "@mantine/core";
-import { RectTool } from "../model/tool";
+import { PixelPencilTool, RectTool } from "../model/tool";
 
 const pixelSize = 15;
 let gridValues = new Array<Array<number>>();
 let imageWidth = 100;
 let imageHeight = 50;
+let previewBuffer: PixelData = initPixelData(imageWidth, imageHeight);
 
 function initGridValues(rows: number, cols: number) {
     gridValues = new Array<Array<number>>(rows);
@@ -18,32 +19,15 @@ function initGridValues(rows: number, cols: number) {
     }
 }
 
-function numberToColorComponents(num: number) {
-    return {
-        r: (num >> 24) & 0xFF,
-        g: (num >> 16) & 0xFF,
-        b: (num >> 8) & 0xFF,
-        a: num & 0xFF
-    }
-}
 initGridValues(imageHeight, imageWidth);
 
 function copyImage() {
     const ctx = (document.getElementById("canvas2") as HTMLCanvasElement)?.getContext("2d");
     const imageData = ctx!.createImageData(imageWidth, imageHeight);
-    for (let r = 0; r < imageHeight; r++) {
-        for (let c = 0; c < imageWidth; c++) {
-            const comp = numberToColorComponents(gridValues[r][c]);
-            if (gridValues[r][c] !== 0xFFFFFFFF) {
-                console.log(gridValues[r][c], r, c, comp);
-            }
-            const i = (r*imageHeight + c)*4;
-            imageData.data[i] = comp.r;
-            imageData.data[i+1] = comp.g;
-            imageData.data[i+2] = comp.b;
-            imageData.data[i+3] = 255; //Math.ceil(comp.a*255);
-        }
-    }
+    previewBuffer.copyFrom(canvasModel.mergedCommittedBuffer);
+    if (canvasModel.currentBuffer)
+        previewBuffer.mergeWith(canvasModel.currentBuffer!);
+    imageData.data.set(previewBuffer.data);
     ctx?.putImageData(imageData, 0, 0);
 }
 const canvasModel = newCanvas("canvas1", imageWidth, imageHeight, pixelSize);
@@ -71,21 +55,24 @@ export const EditorCanvas = () => {
     };
 
     const mouseUp = (e: React.MouseEvent) => {
-        const pixelData = canvasModel.currentTool.commit(canvasModel);
-        canvasModel.pixelDataList.push(pixelData);
-        canvasModel.pixelData.mergeWith(pixelData);
         canvasModel.currentTool.mouseUp(e, canvasModel);
+        canvasModel.commitBuffer();
         canvasModel.drawOnCanvas(canvasRef.current?.getContext("2d")!);
 
         e.preventDefault();
         e.stopPropagation();
         setIdx(idx + 1);
+        copyImage();
     };
     const select = () => {
+        canvasModel.currentTool = PixelPencilTool;
+        canvasModel.startBuffer();
         canvasModel.currentTool.start(canvasModel);
+
     }
     const rect = () => {
         canvasModel.currentTool = RectTool;
+        canvasModel.startBuffer();
         canvasModel.currentTool.start(canvasModel);
     }
     return (

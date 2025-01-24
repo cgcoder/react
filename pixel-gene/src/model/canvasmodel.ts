@@ -13,11 +13,15 @@ export type CanvasModel = {
     readonly pixelSize: number;
     currentTool: Tool;
     getWidth(): number;
-    readonly pixelData: PixelData;
-    readonly pixelDataList: Array<PixelData>;
-    clear(): void;
+    currentBuffer: PixelData | null; // current temp uncommitted buffer
+    committedBuffers: Array<PixelData>; // layers of buffer committed
+    mergedCommittedBuffer: PixelData; // merged committed buffer
+
     drawOnCanvas(ctx: CanvasRenderingContext2D): void;
     getGridPos(e: React.MouseEvent): { x: number, y: number };
+    startBuffer(): void;
+    commitBuffer(): void;
+    resetBuffer(): void;
 }
 
 export type PixelData = {
@@ -27,6 +31,7 @@ export type PixelData = {
     setPixelAt(x: number, y: number, color: ColorData): void;
     drawOnCanvas(ctx: CanvasRenderingContext2D, pixelSize: number): void;
     rgbaStrAt(x: number, y: number): string;
+    copyFrom(other: PixelData): void;
     mergeWith(other: PixelData): void;
 }
 
@@ -55,6 +60,18 @@ export function initPixelData(width: number, height: number): PixelData {
                 }
             }
         },
+        copyFrom: function(other: PixelData) {
+            for (let y = 0; y < this.height; y++) {
+                for (let x = 0; x < this.width; x++) {
+                    const i = (y * this.width + x) * 4;
+                    const otherI = i;
+                    this.data[i] = other.data[otherI];
+                    this.data[i + 1] = other.data[otherI + 1];
+                    this.data[i + 2] = other.data[otherI + 2];
+                    this.data[i + 3] = other.data[otherI + 3];
+                }
+            }
+        },
         mergeWith: function(other: PixelData) {
             for (let y = 0; y < this.height; y++) {
                 for (let x = 0; x < this.width; x++) {
@@ -78,21 +95,33 @@ export function newCanvas(id: string, width: number, height: number, pixelSize: 
         height: height,
         pixelSize: pixelSize,
         currentTool: PixelPencilTool,
-        pixelData: initPixelData(width, height),
-        pixelDataList: [],
+        currentBuffer: initPixelData(width, height),
+        committedBuffers: [],
+        mergedCommittedBuffer: initPixelData(width, height),
         getWidth: function() {
             return this.width;
         },
 
-        clear: function() {
-        },
-
         drawOnCanvas: function(ctx: CanvasRenderingContext2D) {
             ctx.clearRect(0, 0, this.width * this.pixelSize, this.height * this.pixelSize);
-            this.pixelData.drawOnCanvas(ctx, this.pixelSize);
-            this.currentTool.draw(this, ctx);
+            this.mergedCommittedBuffer.drawOnCanvas(ctx, this.pixelSize);
+            if (this.currentBuffer) {
+                this.currentBuffer.drawOnCanvas(ctx, this.pixelSize);
+            }
         },
-
+        startBuffer: function() {
+            this.currentBuffer = initPixelData(this.width, this.height);
+        }, 
+        commitBuffer: function() {
+            if (this.currentBuffer) {
+                this.committedBuffers.push(this.currentBuffer);
+                this.mergedCommittedBuffer.mergeWith(this.currentBuffer);
+                this.currentBuffer = null;
+            }
+        },
+        resetBuffer: function() {
+            this.currentBuffer = initPixelData(this.width, this.height);
+        },
         getGridPos: function(e: React.MouseEvent): { x: number, y: number } {
             const canvas = document.getElementById(id)! as HTMLCanvasElement;
             const rect = canvas.getBoundingClientRect();
@@ -100,7 +129,9 @@ export function newCanvas(id: string, width: number, height: number, pixelSize: 
                 x: Math.floor((e.clientX - rect.left)/pixelSize),
                 y: Math.floor((e.clientY - rect.top)/pixelSize)
             };
-        }
+        },
+
+
     };
 
     return canvas;
