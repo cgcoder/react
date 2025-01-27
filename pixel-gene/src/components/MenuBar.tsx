@@ -1,18 +1,18 @@
-import { Group, Button, Menu, Text, rem } from '@mantine/core';
+import { Group, Button, Menu, rem } from '@mantine/core';
 import {
-    IconSettings,
-    IconSearch,
-    IconPhoto,
-    IconMessageCircle,
-    IconTrash,
-    IconArrowsLeftRight,
-    IconNews,
     IconFile,
     IconDeviceFloppy,
     IconCopy,
 } from '@tabler/icons-react';
+import {useNavigate} from 'react-router-dom';
 
 export const MenuBar = () => {
+    const navigate = useNavigate();
+
+    const newAction = () => {
+        navigate('/editor/new');
+    }
+
     return (
         <Group justify="left" gap={1}>
             <Menu shadow="md" width={200}>
@@ -21,7 +21,7 @@ export const MenuBar = () => {
                 </Menu.Target>
 
                 <Menu.Dropdown>
-                    <Menu.Item leftSection={<IconFile style={{ width: rem(14), height: rem(14) }} />}>
+                    <Menu.Item leftSection={<IconFile style={{ width: rem(14), height: rem(14) }} />} onClick={newAction}>
                         New
                     </Menu.Item>
                     <Menu.Item leftSection={<IconDeviceFloppy style={{ width: rem(14), height: rem(14) }} />}>

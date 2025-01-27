@@ -1,4 +1,4 @@
-import { PixelPencilTool, Tool } from "./tool";
+import { Pos2, Region } from "./common";
 
 export type ColorData = {
     r: number;
@@ -7,60 +7,103 @@ export type ColorData = {
     a: number;
 }
 
-export type CanvasModel = {
-    readonly width: number;
-    readonly height: number;
-    readonly pixelSize: number;
-    currentTool: Tool;
-    getWidth(): number;
-    currentBuffer: PixelData | null; // current temp uncommitted buffer
-    committedBuffers: Array<PixelData>; // layers of buffer committed
-    mergedCommittedBuffer: PixelData; // merged committed buffer
-
-    drawOnCanvas(ctx: CanvasRenderingContext2D): void;
-    getGridPos(e: React.MouseEvent): { x: number, y: number };
-    startBuffer(): void;
-    commitBuffer(): void;
-    resetBuffer(): void;
-}
-
 export type PixelData = {
+    id: number;
     data: Uint8ClampedArray;
+    visible: boolean;
     readonly width: number;
     readonly height: number;
+    tool: string
     setPixelAt(x: number, y: number, color: ColorData): void;
-    drawOnCanvas(ctx: CanvasRenderingContext2D, pixelSize: number): void;
+    drawOnCanvas(ctx: CanvasRenderingContext2D, pixelSize: number, region: Region | null): void;
     rgbaStrAt(x: number, y: number): string;
     copyFrom(other: PixelData): void;
+    clear(): void;
     mergeWith(other: PixelData): void;
 }
 
-export function initPixelData(width: number, height: number): PixelData {
-    const data = new Uint8ClampedArray(width * height * 4);
+export function getGridPos(e: React.MouseEvent, id: string, pixelSize: number): Pos2 {
+    const canvas = document.getElementById(id)! as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
     return {
+        x: Math.floor(((e.clientX - pixelSize / 4) - rect.left) / pixelSize),
+        y: Math.floor(((e.clientY - pixelSize / 4) - rect.top) / pixelSize)
+    };
+}
+
+export function initTransparentLayerData(data: Uint8ClampedArray, width: number) {
+    let count = 0;
+    let row = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        count++;
+
+        const white = count % 2 === (row % 2 ? 1 : 0);
+        data[i] = white ? 200 : 120;
+        data[i + 1] = white ? 200 : 120;
+        data[i + 2] = white ? 200 : 120;
+        data[i + 3] = 255;
+
+        if (count === width) {
+            count = 0;
+            row++;
+        }
+    }
+}
+
+let pixelId = 1;
+export function nextPixelId() {
+    return pixelId++;
+}
+
+export function initPixelData(width: number, height: number, tool: string): PixelData {
+    const data = new Uint8ClampedArray(width * height * 4);
+    if (tool === 'transparent') {
+        initTransparentLayerData(data, width);
+    }
+    return {
+        id: nextPixelId(),
         data: data,
         width: width,
         height: height,
-        rgbaStrAt: function(x: number, y: number): string {
+        visible: true,
+        tool: tool,
+        rgbaStrAt: function (x: number, y: number): string {
             const i = (y * this.width + x) * 4;
-            return `rgba(${this.data[i]}, ${this.data[i+1]}, ${this.data[i+2]}, ${this.data[i+3]/255})`;
-        }, 
-        setPixelAt: function(x: number, y: number, color: ColorData) {
+            return `rgba(${this.data[i]}, ${this.data[i + 1]}, ${this.data[i + 2]}, ${this.data[i + 3] / 255})`;
+        },
+        setPixelAt: function (x: number, y: number, color: ColorData) {
             const i = (y * this.width + x) * 4;
             this.data[i] = color.r;
             this.data[i + 1] = color.g;
             this.data[i + 2] = color.b;
             this.data[i + 3] = color.a;
         },
-        drawOnCanvas: function(ctx: CanvasRenderingContext2D, pixelSize: number) {
-            for (let y = 0; y < this.height; y++) {
-                for (let x = 0; x < this.width; x++) {
-                    ctx.fillStyle = this.rgbaStrAt(x, y);
-                    ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+        drawOnCanvas: function (ctx: CanvasRenderingContext2D, pixelSize: number, region: Region | null) {
+            if (!region) {
+                let updates = 0;
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = 0; x < this.width; x++) {
+                        updates++;
+                        ctx.fillStyle = this.rgbaStrAt(x, y);
+                        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                    }
                 }
+                console.log('updates', updates);
+            }
+            else {
+                let updates = 0;
+                let cnv: HTMLCanvasElement = document.getElementById('canvas1')! as HTMLCanvasElement;
+                for (let y = 0; y <= region.height; y++) {
+                    for (let x = 0; x <= region.width; x++) {
+                        updates++;
+                        ctx.fillStyle = this.rgbaStrAt(region.x + x, region.y + y);
+                        ctx.fillRect((region.x + x) * pixelSize, (region.y + y) * pixelSize, pixelSize, pixelSize);
+                    }
+                }
+                console.log('updates', updates);
             }
         },
-        copyFrom: function(other: PixelData) {
+        copyFrom: function (other: PixelData) {
             for (let y = 0; y < this.height; y++) {
                 for (let x = 0; x < this.width; x++) {
                     const i = (y * this.width + x) * 4;
@@ -72,7 +115,7 @@ export function initPixelData(width: number, height: number): PixelData {
                 }
             }
         },
-        mergeWith: function(other: PixelData) {
+        mergeWith: function (other: PixelData) {
             for (let y = 0; y < this.height; y++) {
                 for (let x = 0; x < this.width; x++) {
                     const i = (y * this.width + x) * 4;
@@ -85,60 +128,14 @@ export function initPixelData(width: number, height: number): PixelData {
                     }
                 }
             }
+        },
+        clear: function () {
+            for (let i = 0; i < this.data.length; i++) {
+                this.data[i] = 0;
+            }
         }
     };
 }
-
-export function newCanvas(id: string, width: number, height: number, pixelSize: number): CanvasModel {
-    const canvas: CanvasModel = {
-        width: width,
-        height: height,
-        pixelSize: pixelSize,
-        currentTool: PixelPencilTool,
-        currentBuffer: initPixelData(width, height),
-        committedBuffers: [],
-        mergedCommittedBuffer: initPixelData(width, height),
-        getWidth: function() {
-            return this.width;
-        },
-
-        drawOnCanvas: function(ctx: CanvasRenderingContext2D) {
-            ctx.clearRect(0, 0, this.width * this.pixelSize, this.height * this.pixelSize);
-            this.mergedCommittedBuffer.drawOnCanvas(ctx, this.pixelSize);
-            if (this.currentBuffer) {
-                this.currentBuffer.drawOnCanvas(ctx, this.pixelSize);
-            }
-        },
-        startBuffer: function() {
-            this.currentBuffer = initPixelData(this.width, this.height);
-        }, 
-        commitBuffer: function() {
-            if (this.currentBuffer) {
-                this.committedBuffers.push(this.currentBuffer);
-                this.mergedCommittedBuffer.mergeWith(this.currentBuffer);
-                this.currentBuffer = null;
-            }
-        },
-        resetBuffer: function() {
-            this.currentBuffer = initPixelData(this.width, this.height);
-        },
-        getGridPos: function(e: React.MouseEvent): { x: number, y: number } {
-            const canvas = document.getElementById(id)! as HTMLCanvasElement;
-            const rect = canvas.getBoundingClientRect();
-            return {
-                x: Math.floor((e.clientX - rect.left)/pixelSize),
-                y: Math.floor((e.clientY - rect.top)/pixelSize)
-            };
-        },
-
-
-    };
-
-    return canvas;
-}
-
-
-
 
 
 
