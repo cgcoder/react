@@ -4,6 +4,11 @@ import { PixelPencilTool, Tool } from './tool';
 import { initPixelData, PixelData } from './canvasmodel';
 
 export interface EditorState {
+    viewCanvas: HTMLCanvasElement | null;
+    backgroundCanvas: HTMLCanvasElement | null;
+
+    setCanvases: (viewCanvas: HTMLCanvasElement, bgCanvas: HTMLCanvasElement) => void;
+
     size: Size;
     setSize: (size: Size) => void;
 
@@ -60,6 +65,12 @@ const setSize = (set: ZustandSet) => (size: Size) => set(() => ({ size: size }))
 const setCurrentTool = (set: ZustandSet) => (tool: Tool) => set(() => ({ currentTool: tool }));
 const setPixelSize = (set: ZustandSet) => (n: number) => set(() => ({ pixelSize: n }));
 
+const setCanvases = (set: ZustandSet) => (canvas: HTMLCanvasElement, bgCanvas: HTMLCanvasElement) => {
+    set(() => {
+        return { viewCanvas: canvas, backgroundCanvas: bgCanvas };
+    });
+}
+
 const addLayer = (set: ZustandSet) => () => {
     set((state) => {
         const layers = [...state.layers, newLayer(state.size.width, state.size.height)];
@@ -108,15 +119,20 @@ const mergeBuffers = (set: ZustandSet) => () => {
     });
 }
 
-const DEFAULT_WIDTH = 400;
-const DEFAULT_HEIGHT = 400;
-const DEFAULT_PIXEL_SIZE = 5;
+const DEFAULT_WIDTH = 32;
+const DEFAULT_HEIGHT = 32;
+const DEFAULT_PIXEL_SIZE = 15;
 
 export const useEditorState = create<EditorState>(
     (set) => {
         const layer = newLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT);
 
         return {
+            viewCanvas: null,
+            backgroundCanvas: null,
+
+            setCanvases: setCanvases(set),
+
             size: { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT },
             setSize: setSize(set),
 

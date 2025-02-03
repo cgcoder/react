@@ -26,8 +26,8 @@ export function getGridPos(e: React.MouseEvent, id: string, pixelSize: number): 
     const canvas = document.getElementById(id)! as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
     return {
-        x: Math.floor(((e.clientX - pixelSize / 4) - rect.left) / pixelSize),
-        y: Math.floor(((e.clientY - pixelSize / 4) - rect.top) / pixelSize)
+        x: Math.floor((e.clientX - rect.left) / pixelSize),
+        y: Math.floor((e.clientY - rect.top) / pixelSize)
     };
 }
 
@@ -81,13 +81,11 @@ export function initPixelData(width: number, height: number, tool: string): Pixe
         drawOnCanvas: function (ctx: CanvasRenderingContext2D, pixelSize: number, region: Region | null) {
             if (!region) {
                 let updates = 0;
-                for (let y = 0; y < this.height; y++) {
-                    for (let x = 0; x < this.width; x++) {
-                        updates++;
-                        ctx.fillStyle = this.rgbaStrAt(x, y);
-                        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
-                    }
+                const imageData = ctx.createImageData(this.width, this.height);
+                for (let i = 0; i < this.data.length; i++) {
+                    imageData.data[i] = this.data[i];
                 }
+                ctx.putImageData(imageData, 0, 0);
                 console.log('updates', updates);
             }
             else {
